@@ -288,7 +288,7 @@ func (g *Generator) Generate(d *descriptor.FileDescriptorProto) ([]*plugin.CodeG
 			for _, f2 := range m2.GetField() {
 				mf := ctx.newField(f2)
 				nestedModel.Fields = append(nestedModel.Fields, mf)
-				if mf.Name == "value" {
+				if nestedModel.IsMap && mf.Name == "value" {
 					nestedModel.MapValueType = mf.Type
 				}
 			}
