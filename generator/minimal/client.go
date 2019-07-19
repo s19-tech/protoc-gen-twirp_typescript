@@ -44,7 +44,7 @@ const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
 	return Object.keys(m).reduce((acc, key) => {
 		acc[key] = {{.MapValueType}}ToJSON(m[key]);
 		return acc;
-	}, {});
+	}, {} as {{.Name}});
 {{else}}
     return {
         {{range .Fields -}}
@@ -498,7 +498,7 @@ func stringify(f ModelField) string {
 		}
 
 		if f.IsMessage {
-			return fmt.Sprintf("m.%s.map(%sToJSON)", f.Name, singularType)
+			return fmt.Sprintf("m.%s && m.%s.map(%sToJSON)", f.Name, f.Name, singularType)
 		}
 	}
 
