@@ -423,7 +423,6 @@ func (c *APIContext) newField(f *descriptor.FieldDescriptorProto) ModelField {
 // generates the (Type, JSONType) tuple for a ModelField so marshal/unmarshal functions
 // will work when converting between TS interfaces and protobuf JSON.
 func (c *APIContext) protoToTSType(f *descriptor.FieldDescriptorProto, mf ModelField) (string, string) {
-	// fmt.Printf("%v = %v", f.GetName(), f.GetTypeName())
 	tsType := "string"
 	jsonType := "string"
 
