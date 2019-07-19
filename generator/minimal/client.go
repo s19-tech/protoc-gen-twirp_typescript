@@ -175,8 +175,6 @@ type APIContext struct {
 func (ctx *APIContext) AddModel(m *Model) {
 	ctx.Models = append(ctx.Models, m)
 	ctx.modelLookup[m.Name] = m
-
-	log.Printf("AddModel: %s : MAP: %v", m.Name, m.IsMap)
 }
 
 func getBaseType(f ModelField) string {
@@ -199,7 +197,6 @@ func (ctx *APIContext) ApplyMarshalFlags() {
 			}
 
 			baseType := getBaseType(f)
-			log.Printf("ApplyMarshalFlags: model: %s, field: %s, baseType: %s", m.Name, f.Name, baseType)
 			if m.CanMarshal {
 				ctx.enableMarshal(ctx.modelLookup[baseType])
 			}
@@ -411,7 +408,6 @@ func (c *APIContext) newField(f *descriptor.FieldDescriptorProto) ModelField {
 		Name: camelCase(f.GetName()),
 	}
 
-	log.Printf("f.GetTypeName: %v", c.removePkg(f.GetTypeName()))
 	if m, ok := c.modelLookup[c.removePkg(f.GetTypeName())]; ok {
 		field.IsMap = m.IsMap
 	}
