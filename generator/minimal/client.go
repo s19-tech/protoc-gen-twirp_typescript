@@ -59,7 +59,7 @@ const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
 const JSONTo{{.Name}} = (m: {{.Name}} | {{.Name}}JSON): {{.Name}} => {
 	{{$Model := .Name}}
 	{{if .IsMap}}
-	return Object.keys(m).reduce((acc, key) => {
+	return Object.keys(m as ({{.Name}} | {{.Name}}JSON)).reduce((acc, key) => {
 		acc[key] = JSONTo{{.MapValueType}}(m[key]);
 		return acc;
 	  }, {});
