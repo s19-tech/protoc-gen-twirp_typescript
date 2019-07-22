@@ -39,10 +39,7 @@ interface {{.Name}}JSON {
 }
 
 {{if .CanMarshal}}
-const {{.Name}}ToJSON = (m: {{.Name}} | undefined): {{.Name}}JSON | undefined => {
-	if (m === undefined) {
-		return undefined;
-	}
+const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
 {{if .IsMap}}
 	return Object.keys(m).reduce((acc, key) => {
 		acc[key] = {{.MapValueType}}ToJSON(m[key]);
@@ -59,13 +56,10 @@ const {{.Name}}ToJSON = (m: {{.Name}} | undefined): {{.Name}}JSON | undefined =>
 {{end -}}
 
 {{if .CanUnmarshal}}
-const JSONTo{{.Name}} = (m: {{.Name}} | {{.Name}}JSON | undefined): {{.Name}} | undefined => {
-	if (m === undefined) {
-		return undefined;
-	}
+const JSONTo{{.Name}} = (m: {{.Name}}JSON): {{.Name}} => {
 	{{$Model := .Name}}
 	{{if .IsMap}}
-	return Object.keys(m as ({{.Name}} | {{.Name}}JSON)).reduce((acc, key) => {
+	return Object.keys(m).reduce((acc, key) => {
 		acc[key] = JSONTo{{.MapValueType}}(m[key]);
 		return acc;
 	  }, {});
@@ -500,7 +494,7 @@ func stringify(f ModelField) string {
 		singularType := strings.Trim(f.Type, "[]") // strip array brackets from type
 
 		if f.Type == "Date" {
-			return fmt.Sprintf("m.%s.map((n) => n.toISOString())", f.Name)
+			return fmt.Sprintf("m.%s && m.%s.map((n) => n.toISOString())", f.Name, f.Name)
 		}
 
 		if f.IsMessage {
@@ -509,43 +503,37 @@ func stringify(f ModelField) string {
 	}
 
 	if f.Type == "Date" {
-		return fmt.Sprintf("m.%s.toISOString()", f.Name)
+		return fmt.Sprintf("m.%s && m.%s.toISOString()", f.Name, f.Name)
 	}
 
 	if f.IsMessage {
-		return fmt.Sprintf("%sToJSON(m.%s)", f.Type, f.Name)
+		return fmt.Sprintf("m.%s && %sToJSON(m.%s)", f.Name, f.Type, f.Name)
 	}
 
 	return "m." + f.Name
 }
 
 func parse(f ModelField, modelName string) string {
-	field := "(((m as " + modelName + ")." + f.Name + ") ? (m as " + modelName + ")." + f.Name + " : (m as " + modelName + "JSON)." + f.JSONName + ")"
-	if f.Name == f.JSONName {
-		field = "m." + f.Name
-	}
+	field := "m." + f.JSONName
 
 	if f.IsRepeated && !f.IsMap {
-		singularTSType := strings.Trim(f.Type, "[]")       // strip array brackets from type
-		singularJSONType := strings.Trim(f.JSONType, "[]") // strip array brackets from type
-
-		arrayField := fmt.Sprintf("(%s as (%s | %s)[])", field, singularTSType, singularJSONType)
+		singularTSType := strings.Trim(f.Type, "[]") // strip array brackets from type
 
 		if f.Type == "Date[]" {
-			return fmt.Sprintf("%s.map((n) => new Date(n))", arrayField)
+			return fmt.Sprintf("%s && %s.map((n) => new Date(n))", field, field)
 		}
 
 		if f.IsMessage {
-			return fmt.Sprintf("%s.map(JSONTo%s)", arrayField, singularTSType)
+			return fmt.Sprintf("%s && %s.map(JSONTo%s)", field, field, singularTSType)
 		}
 	}
 
 	if f.Type == "Date" {
-		return fmt.Sprintf("new Date(%s)", field)
+		return fmt.Sprintf("%s && new Date(%s)", field, field)
 	}
 
 	if f.IsMessage {
-		return fmt.Sprintf("JSONTo%s(%s)", f.Type, field)
+		return fmt.Sprintf("%s && JSONTo%s(%s)", field, f.Type, field)
 	}
 
 	return field
