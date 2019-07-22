@@ -39,7 +39,10 @@ interface {{.Name}}JSON {
 }
 
 {{if .CanMarshal}}
-const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
+const {{.Name}}ToJSON = (m: {{.Name}} | undefined): {{.Name}}JSON | undefined => {
+	if (m === undefined) {
+		return undefined;
+	}
 {{if .IsMap}}
 	return Object.keys(m).reduce((acc, key) => {
 		acc[key] = {{.MapValueType}}ToJSON(m[key]);
@@ -56,7 +59,10 @@ const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
 {{end -}}
 
 {{if .CanUnmarshal}}
-const JSONTo{{.Name}} = (m: {{.Name}} | {{.Name}}JSON): {{.Name}} => {
+const JSONTo{{.Name}} = (m: {{.Name}} | {{.Name}}JSON | undefined): {{.Name}} | undefined => {
+	if (m === undefined) {
+		return undefined;
+	}
 	{{$Model := .Name}}
 	{{if .IsMap}}
 	return Object.keys(m as ({{.Name}} | {{.Name}}JSON)).reduce((acc, key) => {
