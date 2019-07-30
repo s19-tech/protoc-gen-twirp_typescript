@@ -37,7 +37,7 @@ func generate(in *plugin.CodeGeneratorRequest) *plugin.CodeGeneratorResponse {
 	resp := &plugin.CodeGeneratorResponse{}
 	params := generator.GetParameters(in)
 
-	gen, err := generator.NewGenerator(params)
+	gen, err := generator.NewGenerator(params, in.FileToGenerate)
 	if err != nil {
 		resp.Error = proto.String(err.Error())
 		return resp

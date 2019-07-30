@@ -15,31 +15,34 @@ import (
 
 const apiTemplate = `
 import {createTwirpRequest, throwTwirpError, Fetch} from './twirp';
+{{range $key, $value := .Dependencies}}
+import * as {{$value}} from '../{{$key}}';
+{{end}}
 
 {{range .Models}}
 {{- if not .Primitive}}
 export interface {{.Name}} {
 	{{if .IsMap}}
-	[key: string]: {{.MapValueType}};
+	[key: string]: {{if .IsImported}}{{.Package}}.{{end}}{{.MapValueType}};
 	{{else}}
     {{range .Fields -}}
-    {{.Name}}?: {{.Type}};
+    {{.Name}}?: {{if .IsImported}}{{.Package}}.{{end}}{{.Type}};
 	{{end}}
     {{end}}
 }
 
-interface {{.Name}}JSON {
+export interface {{.Name}}JSON {
 	{{if .IsMap}}
-	[key: string]: {{.MapValueType}}JSON;
+	[key: string]: {{if .IsImported}}{{.Package}}.{{end}}{{.MapValueType}}JSON;
 	{{else}}
 	{{range .Fields -}}
-	{{.JSONName}}?: {{.JSONType}};
+	{{.JSONName}}?: {{if .IsImported}}{{.Package}}.{{end}}{{.JSONType}};
 	{{end}}
     {{end}}
 }
 
 {{if .CanMarshal}}
-const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
+export const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
 {{if .IsMap}}
 	return Object.keys(m).reduce((acc, key) => {
 		acc[key] = {{.MapValueType}}ToJSON(m[key]);
@@ -56,7 +59,7 @@ const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
 {{end -}}
 
 {{if .CanUnmarshal}}
-const JSONTo{{.Name}} = (m: {{.Name}}JSON): {{.Name}} => {
+export const JSONTo{{.Name}} = (m: {{.Name}}JSON): {{.Name}} => {
 	{{$Model := .Name}}
 	{{if .IsMap}}
 	return Object.keys(m).reduce((acc, key) => {
@@ -80,7 +83,7 @@ const JSONTo{{.Name}} = (m: {{.Name}}JSON): {{.Name}} => {
 {{range .Services}}
 export interface {{.Name}} {
     {{- range .Methods}}
-    {{.Name}}: ({{.InputArg}}: {{.InputType}}) => Promise<{{.OutputType}}>;
+    {{.Name}}: ({{.InputArg}}: {{.InputPackage}}{{.InputType}}) => Promise<{{.OutputPackage}}{{.OutputType}}>;
     {{end}}
 }
 
@@ -99,18 +102,18 @@ export class {{.Name}}Client implements {{.Name}} {
     }
 
     {{- range .Methods}}
-    {{.Name}}({{.InputArg}}: {{.InputType}}): Promise<{{.OutputType}}> {
+    {{.Name}}({{.InputArg}}: {{.InputPackage}}{{.InputType}}): Promise<{{.OutputPackage}}{{.OutputType}}> {
         const url = this.hostname + this.pathPrefix + "{{.Path}}";
-        let body: {{.InputType}} | {{.InputType}}JSON = {{.InputArg}};
+        let body: {{.InputPackage}}{{.InputType}} | {{.InputPackage}}{{.InputType}}JSON = {{.InputArg}};
         if (!this.writeCamelCase) {
-            body = {{.InputType}}ToJSON({{.InputArg}});
+            body = {{.InputPackage}}{{.InputType}}ToJSON({{.InputArg}});
         }
         return this.fetch(createTwirpRequest(url, body, this.optionsOverride)).then((resp) => {
             if (!resp.ok) {
                 return throwTwirpError(resp);
             }
 
-            return resp.json().then(JSONTo{{.OutputType}});
+            return resp.json().then({{.OutputPackage}}JSONTo{{.OutputType}});
         });
     }
     {{end}}
@@ -136,6 +139,8 @@ type ModelField struct {
 	IsMessage  bool
 	IsRepeated bool
 	IsMap      bool
+	IsImported bool
+	Package    string
 }
 
 type Service struct {
@@ -145,11 +150,13 @@ type Service struct {
 }
 
 type ServiceMethod struct {
-	Name       string
-	Path       string
-	InputArg   string
-	InputType  string
-	OutputType string
+	Name          string
+	Path          string
+	InputArg      string
+	InputPackage  string
+	InputType     string
+	OutputPackage string
+	OutputType    string
 }
 
 func NewAPIContext(twirpVersion string) APIContext {
@@ -158,18 +165,20 @@ func NewAPIContext(twirpVersion string) APIContext {
 		twirpPrefix = ""
 	}
 
-	ctx := APIContext{TwirpPrefix: twirpPrefix}
-	ctx.modelLookup = make(map[string]*Model)
-
-	return ctx
+	return APIContext{
+		TwirpPrefix:  twirpPrefix,
+		modelLookup:  make(map[string]*Model),
+		Dependencies: make(map[string]string),
+	}
 }
 
 type APIContext struct {
-	Package     string
-	Models      []*Model
-	Services    []*Service
-	TwirpPrefix string
-	modelLookup map[string]*Model
+	Package      string
+	Models       []*Model
+	Services     []*Service
+	TwirpPrefix  string
+	modelLookup  map[string]*Model
+	Dependencies map[string]string
 }
 
 func (ctx *APIContext) AddModel(m *Model) {
@@ -191,8 +200,8 @@ func getBaseType(f ModelField) string {
 func (ctx *APIContext) ApplyMarshalFlags() {
 	for _, m := range ctx.Models {
 		for _, f := range m.Fields {
-			// skip primitive types and WKT Timestamps
-			if !f.IsMessage || f.Type == "Date" {
+			// skip primitive types, WKT Timestamps and imported types
+			if !f.IsMessage || f.Type == "Date" || f.IsImported {
 				continue
 			}
 
@@ -249,13 +258,15 @@ func (ctx *APIContext) enableUnmarshal(m *Model) {
 	}
 }
 
-func NewGenerator(twirpVersion string, p map[string]string) *Generator {
-	return &Generator{twirpVersion: twirpVersion, params: p}
+func NewGenerator(twirpVersion string, p map[string]string, f []string) *Generator {
+	return &Generator{twirpVersion: twirpVersion, params: p, filesToGenerate: f, filesToPackage: make(map[string]string)}
 }
 
 type Generator struct {
-	twirpVersion string
-	params       map[string]string
+	twirpVersion    string
+	params          map[string]string
+	filesToGenerate []string
+	filesToPackage  map[string]string
 }
 
 func (g *Generator) Generate(d *descriptor.FileDescriptorProto) ([]*plugin.CodeGeneratorResponse_File, error) {
@@ -269,13 +280,25 @@ func (g *Generator) Generate(d *descriptor.FileDescriptorProto) ([]*plugin.CodeG
 	ctx := NewAPIContext(g.twirpVersion)
 	ctx.Package = d.GetPackage()
 
+	// Add a mapping of proto filename to the package name for use when generating imports
+	g.filesToPackage[d.GetName()] = d.GetPackage()
+	for _, f := range d.GetDependency() {
+		if f == "google/protobuf/timestamp.proto" {
+			continue
+		}
+		ctx.Dependencies[typescriptFilename(f)] = typescriptPackage(g.filesToPackage[f])
+	}
+
+	if !contains(g.filesToGenerate, *d.Name) {
+		return files, nil
+	}
+
 	// Parse all Messages for generating typescript interfaces
 	for _, m := range d.GetMessageType() {
 		model := &Model{
 			Name: m.GetName(),
 		}
 
-		// TODO: refactor
 		for _, m2 := range m.GetNestedType() {
 			nestedModel := &Model{
 				Name: fmt.Sprintf("%s_%s", m.GetName(), m2.GetName()),
@@ -313,15 +336,26 @@ func (g *Generator) Generate(d *descriptor.FileDescriptorProto) ([]*plugin.CodeG
 		for _, m := range s.GetMethod() {
 			methodPath := m.GetName()
 			methodName := strings.ToLower(methodPath[0:1]) + methodPath[1:]
-			in := ctx.removePkg(m.GetInputType())
-			arg := strings.ToLower(in[0:1]) + in[1:]
+			inputPackage := ""
+			inputType := ctx.removePkg(m.GetInputType())
+			arg := strings.ToLower(inputType[0:1]) + inputType[1:]
+			if ctx.extractPkg(m.GetInputType()) != typescriptPackage(ctx.Package) {
+				inputPackage = fmt.Sprintf("%s.", ctx.extractPkg(m.GetInputType()))
+			}
+			outputType := ctx.removePkg(m.GetOutputType())
+			outputPackage := ""
+			if ctx.extractPkg(m.GetOutputType()) != typescriptPackage(ctx.Package) {
+				outputPackage = fmt.Sprintf("%s.", ctx.extractPkg(m.GetOutputType()))
+			}
 
 			method := ServiceMethod{
-				Name:       methodName,
-				Path:       methodPath,
-				InputArg:   arg,
-				InputType:  in,
-				OutputType: ctx.removePkg(m.GetOutputType()),
+				Name:          methodName,
+				Path:          methodPath,
+				InputPackage:  inputPackage,
+				InputArg:      arg,
+				InputType:     inputType,
+				OutputPackage: outputPackage,
+				OutputType:    outputType,
 			}
 
 			service.Methods = append(service.Methods, method)
@@ -403,6 +437,16 @@ func tsModuleFilename(f *descriptor.FileDescriptorProto) string {
 	return name
 }
 
+func contains(a []string, b string) bool {
+	for i := range a {
+		if a[i] == b {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (c *APIContext) newField(f *descriptor.FieldDescriptorProto) ModelField {
 	field := ModelField{
 		Name: camelCase(f.GetName()),
@@ -416,6 +460,10 @@ func (c *APIContext) newField(f *descriptor.FieldDescriptorProto) ModelField {
 	field.JSONName = f.GetName()
 	field.IsMessage = f.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE && !(f.GetTypeName() == ".google.protobuf.Timestamp")
 	field.IsRepeated = isRepeated(f)
+	field.IsImported = field.IsMessage && (typescriptPackage(c.Package) != c.extractPkg(f.GetTypeName()))
+	if field.IsImported {
+		field.Package = c.extractPkg(f.GetTypeName())
+	}
 
 	return field
 }
@@ -470,9 +518,25 @@ func isRepeated(field *descriptor.FieldDescriptorProto) bool {
 }
 
 func (c *APIContext) removePkg(s string) string {
-	s2 := strings.ReplaceAll(s, c.Package, "")
-	s3 := strings.TrimLeft(s2, ".")
-	return strings.ReplaceAll(s3, ".", "_")
+	a := strings.Split(s, ".")
+	return a[len(a)-1]
+}
+
+func (c *APIContext) extractPkg(s string) string {
+	a := strings.Split(s, ".")
+	if len(a) > 1 {
+		return typescriptPackage(strings.Join(a[1:len(a)-1], "."))
+	}
+
+	return ""
+}
+
+func typescriptPackage(s string) string {
+	return strings.ReplaceAll(s, ".", "_")
+}
+
+func typescriptFilename(s string) string {
+	return strings.TrimRight(s, ".proto")
 }
 
 func camelCase(s string) string {
@@ -507,7 +571,12 @@ func stringify(f ModelField) string {
 	}
 
 	if f.IsMessage {
-		return fmt.Sprintf("m.%s && %sToJSON(m.%s)", f.Name, f.Type, f.Name)
+		typeName := f.Type
+		if f.IsImported {
+			typeName = fmt.Sprintf("%s.%s", f.Package, f.Type)
+		}
+
+		return fmt.Sprintf("m.%s && %sToJSON(m.%s)", f.Name, typeName, f.Name)
 	}
 
 	return "m." + f.Name

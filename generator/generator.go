@@ -32,7 +32,7 @@ type Generator interface {
 	Generate(d *descriptor.FileDescriptorProto) ([]*plugin.CodeGeneratorResponse_File, error)
 }
 
-func NewGenerator(p map[string]string) (Generator, error) {
+func NewGenerator(p map[string]string, f []string) (Generator, error) {
 	version, ok := p["version"]
 	if !ok {
 		version = "v5"
@@ -47,5 +47,5 @@ func NewGenerator(p map[string]string) (Generator, error) {
 		return pbjs.NewGenerator(version), nil
 	}
 
-	return minimal.NewGenerator(version, p), nil
+	return minimal.NewGenerator(version, p, f), nil
 }
