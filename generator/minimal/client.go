@@ -13,14 +13,13 @@ import (
 	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 
-const apiTemplate = `
-import {createTwirpRequest, throwTwirpError, Fetch} from './twirp';
+const apiTemplate = `import {createTwirpRequest, throwTwirpError, Fetch} from './twirp';
 
 {{- range .Enums}}
 
 export enum {{.Name}} {
 {{- range .Values}}
-	{{.}} = "{{.}}",
+  {{.}} = "{{.}}",
 {{- end}}
 }
 {{- end -}}
@@ -30,10 +29,10 @@ export enum {{.Name}} {
 
 export interface {{.Name}} {
 {{- if .IsMap}}
-	[key: string]: {{.MapValueType}};
+  [key: string]: {{.MapValueType}};
 {{- else -}}
 {{- range .Fields}}
-    {{.Name}}?: {{.Type}};
+  {{.Name}}?: {{.Type}};
 {{- end}}
 {{- end}}
 }
@@ -41,13 +40,13 @@ export interface {{.Name}} {
 interface {{.Name}}JSON {
 {{- if .IsMap}}
 {{- if .MapValueTypePrimitive}}
-	[key: string]: {{.MapValueType}};
+  [key: string]: {{.MapValueType}};
 {{- else}}
-	[key: string]: {{.MapValueType}}JSON;
+  [key: string]: {{.MapValueType}}JSON;
 {{- end -}}
 {{- else -}}
 {{- range .Fields}}
-	{{.JSONName}}?: {{.JSONType}};
+  {{.JSONName}}?: {{.JSONType}};
 {{- end}}
 {{- end}}
 }
@@ -57,16 +56,16 @@ interface {{.Name}}JSON {
 
 const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
 {{- if .IsMap}}
-	return Object.keys(m).reduce((acc, key) => {
-		acc[key] = {{.MapValueType}}ToJSON(m[key]);
-		return acc;
-	}, {} as {{.Name}});
+  return Object.keys(m).reduce((acc, key) => {
+    acc[key] = {{.MapValueType}}ToJSON(m[key]);
+    return acc;
+  }, {} as {{.Name}});
 {{- else}}
-    return {
-        {{- range .Fields}}
-        {{.JSONName}}: {{stringify .}},
-        {{- end}}
-	};
+  return {
+    {{- range .Fields}}
+    {{.JSONName}}: {{stringify .}},
+    {{- end}}
+  };
 {{- end}}
 };
 {{- end -}}
@@ -76,16 +75,16 @@ const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
 const JSONTo{{.Name}} = (m: {{.Name}}JSON): {{.Name}} => {
 	{{- $Model := .Name -}}
 {{- if .IsMap}}
-	return Object.keys(m).reduce((acc, key) => {
-		acc[key] = JSONTo{{.MapValueType}}(m[key]);
-		return acc;
-	  }, {} as {{.Name}});
+  return Object.keys(m).reduce((acc, key) => {
+    acc[key] = JSONTo{{.MapValueType}}(m[key]);
+    return acc;
+  }, {} as {{.Name}});
 {{- else}}
-    return {
-        {{- range .Fields}}
-        {{.Name}}: {{parse . $Model}},
-        {{- end}}
-	};
+  return {
+    {{- range .Fields}}
+    {{.Name}}: {{parse . $Model}},
+    {{- end}}
+  };
 {{- end}}
 };
 {{- end -}}
@@ -99,40 +98,40 @@ const JSONTo{{.Name}} = (m: {{.Name}}JSON): {{.Name}} => {
 
 export interface {{.Name}} {
 {{- range .Methods}}
-    {{.Name}}: ({{.InputArg}}: {{.InputType}}) => Promise<{{.OutputType}}>;
+  {{.Name}}: ({{.InputArg}}: {{.InputType}}) => Promise<{{.OutputType}}>;
 {{- end}}
 }
 
 export class {{.Name}}Client implements {{.Name}} {
-    private hostname: string;
-    private fetch: Fetch;
-    private writeCamelCase: boolean;
-	private pathPrefix = "{{$twirpPrefix}}/{{.Package}}.{{.Name}}/";
-	private optionsOverride: object;
+  private hostname: string;
+  private fetch: Fetch;
+  private writeCamelCase: boolean;
+  private pathPrefix = "{{$twirpPrefix}}/{{.Package}}.{{.Name}}/";
+  private optionsOverride: object;
 
-    constructor(hostname: string, fetch: Fetch, writeCamelCase = false, optionsOverride: any = {}) {
-        this.hostname = hostname;
-        this.fetch = fetch;
-		this.writeCamelCase = writeCamelCase;
-		this.optionsOverride = optionsOverride;
-    }
+  constructor(hostname: string, fetch: Fetch, writeCamelCase = false, optionsOverride: any = {}) {
+    this.hostname = hostname;
+    this.fetch = fetch;
+    this.writeCamelCase = writeCamelCase;
+    this.optionsOverride = optionsOverride;
+  }
 
 {{- range .Methods}}
 
-    {{.Name}}({{.InputArg}}: {{.InputType}}): Promise<{{.OutputType}}> {
-        const url = this.hostname + this.pathPrefix + "{{.Path}}";
-        let body: {{.InputType}} | {{.InputType}}JSON = {{.InputArg}};
-        if (!this.writeCamelCase) {
-            body = {{.InputType}}ToJSON({{.InputArg}});
-        }
-        return this.fetch(createTwirpRequest(url, body, this.optionsOverride)).then((resp) => {
-            if (!resp.ok) {
-                return throwTwirpError(resp);
-            }
-
-            return resp.json().then(JSONTo{{.OutputType}});
-        });
+  {{.Name}}({{.InputArg}}: {{.InputType}}): Promise<{{.OutputType}}> {
+    const url = this.hostname + this.pathPrefix + "{{.Path}}";
+    let body: {{.InputType}} | {{.InputType}}JSON = {{.InputArg}};
+    if (!this.writeCamelCase) {
+      body = {{.InputType}}ToJSON({{.InputArg}});
     }
+    return this.fetch(createTwirpRequest(url, body, this.optionsOverride)).then((resp) => {
+      if (!resp.ok) {
+        return throwTwirpError(resp);
+      }
+
+      return resp.json().then(JSONTo{{.OutputType}});
+    });
+  }
 {{- end}}
 }
 {{- end}}
@@ -157,6 +156,7 @@ type ModelField struct {
 	IsMessage             bool
 	IsRepeated            bool
 	IsMap                 bool
+	IsEnum                bool
 	MapValueTypePrimitive bool
 }
 
@@ -483,6 +483,7 @@ func (c *APIContext) newField(f *descriptor.FieldDescriptorProto) ModelField {
 	field.JSONName = f.GetName()
 	field.IsMessage = f.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE && !(f.GetTypeName() == ".google.protobuf.Timestamp")
 	field.IsRepeated = isRepeated(f)
+	field.IsEnum = f.GetType() == descriptor.FieldDescriptorProto_TYPE_ENUM
 
 	return field
 }
@@ -525,7 +526,7 @@ func (c *APIContext) protoToTSType(f *descriptor.FieldDescriptorProto, mf ModelF
 	case descriptor.FieldDescriptorProto_TYPE_ENUM:
 		name := f.GetTypeName()
 		tsType = c.removePkg(name)
-		jsonType = c.removePkg(name)
+		jsonType = "string"
 	}
 
 	if isRepeated(f) && !mf.IsMap {
@@ -605,6 +606,10 @@ func parse(f ModelField, modelName string) string {
 
 	if f.IsMessage && !f.MapValueTypePrimitive {
 		return fmt.Sprintf("%s && JSONTo%s(%s)", field, f.Type, field)
+	}
+
+	if f.IsEnum {
+		return fmt.Sprintf("%s as %s", field, f.Type)
 	}
 
 	return field
