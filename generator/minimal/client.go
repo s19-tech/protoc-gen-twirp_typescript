@@ -530,7 +530,6 @@ func (c *APIContext) protoToTSType(f *descriptor.FieldDescriptorProto, mf ModelF
 		name := f.GetTypeName()
 		tsType = c.removePkg(name)
 		jsonType = "string"
-		optional = true
 	}
 
 	if isRepeated(f) && !mf.IsMap {
